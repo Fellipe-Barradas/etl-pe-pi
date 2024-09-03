@@ -43,7 +43,7 @@ def baixar_arquivos(ano: int, mes: int):
         data_pesquisa += timedelta(days=1)
         
 # Função para verificar se o link é válido para download
-def is_a_valid_link(link: webdriver.remote.webelement.WebElement):
+def is_a_valid_link(link: webdriver.remote.webelement.WebElement) -> bool:
     return "Lei" in link.text or "L." in link.text or "Diario Oficial" in link.text
 
 # Função para salvar o arquivo pdf seguindo o formato: diario_ano-mes-dia_leis_pagina
