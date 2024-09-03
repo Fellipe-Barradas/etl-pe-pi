@@ -1,0 +1,9 @@
+dist
+.env
+build
+.idea
+main.spec
+output
+**/__pycache__
+**.pdf
+poppler-**
