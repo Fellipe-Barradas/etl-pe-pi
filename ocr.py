@@ -26,7 +26,7 @@ def gerar_pdf_nome(dec_lei: str, data: str):
     mes = data.split("-")[1]
     mes_extenso = mes_extenso_por_numero(mes)
     ano = data.split("-")[0]
-    numero_lei = dec_lei.split(" ")[2].split(",")[0]
+    numero_lei = dec_lei.split(" ")[2].replace(",", "")
     categoria_documento = dec_lei.split(" ")[0]
     diretorio = f"resultado\\{categoria_documento}\\{ano}\\{mes_extenso}"
     diretorio = verificar_caminho_plataforma(diretorio)
@@ -60,6 +60,9 @@ def transform_to_image(file_path: str, file_name: str, page_num: int=0):
 def ocr_image(file_path: str):
     subscription_key = os.getenv("SUBSCRIPTION_KEY")
     endpoint = os.getenv('ENDPOINT')
+    if not subscription_key or not endpoint:
+        raise ValueError("Por favor, configure a variável de ambiente SUBSCRIPTION_KEY e ENDPOINT.")
+    
     client = ImageAnalysisClient(
         endpoint=endpoint,
         language="por",
@@ -68,9 +71,10 @@ def ocr_image(file_path: str):
     image_data = open(file_path, "rb").read()
     result = client.analyze(image_data, visual_features=[VisualFeatures.read])
     text = ""
-    for line in result.read['blocks']:
-        for t in line['lines']:
-            text += t['text'] + " "
+    if result.read is not None:
+        for line in result.read['blocks']:
+            for t in line['lines']:
+                text += t['text'] + " "
     return text
 
 # Separa os arquivos PDF de um diário oficial em arquivos menores.
@@ -82,7 +86,7 @@ def separar_arquivos_merge(pasta: str, diario_data: str):
             if data not in [a["data"] for a in arquivos] and data.startswith(diario_data):
                 arquivos.append({"data": data, "arquivos": []})
             for a in arquivos:
-                if a["data"] == data and a["data"].startswith(diario_data):
+                if a["data"] == data and str(a["data"]).startswith(diario_data):
                     a["arquivos"].append(os.path.join(root, file))
     for data in arquivos:
         merge_pdfs(data["arquivos"], f"diarios\\{data['data']}.pdf")

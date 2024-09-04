@@ -45,6 +45,18 @@ def pegar_arquivos_pasta(pasta: str, diario_data: str) -> List[str]:
                 arquivos.append(os.path.join(root, file))
     return arquivos
 
-def criar_pasta_se_nao_existe(pasta: str):
-    if not os.path.isdir(pasta):
-        os.makedirs(pasta)
+def criar_pasta_se_nao_existe(pastas: List[str]):
+    for pasta in pastas:
+        if not os.path.isdir(pasta):
+            os.makedirs(pasta)
+        
+def limpar_pasta(pastas: List[str]):
+    for pasta in pastas:
+        if os.path.isdir(pasta):
+            for root, dirs, files in os.walk(pasta):
+                for file in files:
+                    os.remove(os.path.join(root, file))
+                for dir in dirs:
+                    os.rmdir(os.path.join(root, dir))
+            os.rmdir(pasta)
+    

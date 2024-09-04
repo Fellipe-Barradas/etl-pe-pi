@@ -1,68 +1,55 @@
 import os
+from multiprocessing import Pool, freeze_support, cpu_count
 import sys
 import flet as ft
 from PyPDF2 import PdfReader, PdfWriter
 from dotenv import load_dotenv
 from scrapper import baixar_arquivos
 from ocr import gerar_pdf_nome, ocr_file, separar_arquivos_merge
-from utils import verificar_caminho_plataforma, pegar_arquivos_pasta
-from regex import busca_padrao, final_busca, anexo_pattern
+from utils import verificar_caminho_plataforma, pegar_arquivos_pasta, limpar_pasta, criar_pasta_se_nao_existe
+from regex import BUSCA_PADRAO, ANEXO_PADRAO, FINAL_PADRAO
 
-def gerar_arquivos_de_leis_e_decretos(pagina: ft.Page, diario_data: str):
-    load_dotenv()
-    
-    separar_arquivos_merge("encontrados", diario_data)
-    diarios = pegar_arquivos_pasta("diarios", diario_data)
-    
-    row = ft.Row()
-    lista = ft.ListView(expand=1, spacing=10, padding=20, auto_scroll=True, height=100)
-    lista_com_anexos = ft.ListView(expand=1, spacing=10, padding=20, auto_scroll=True, height=100)
-    row.controls.append(lista)
-    row.controls.append(lista_com_anexos)
-    
+def read_transform_file(pdf_file_path: str, pagina, row, lista, lista_com_anexos):
+    pagina.remove(row)
+    lista.controls.append(ft.Text(f"Analisando o diário: {pdf_file_path}", size=12))
+    row.controls[0] = lista
     pagina.add(row)
+    pdf_file_path = verificar_caminho_plataforma(pdf_file_path)
+    reader = PdfReader(pdf_file_path)
 
-    for pdf_file_path in diarios:
-        pagina.remove(row)
-        lista.controls.append(ft.Text(f"Analisando o diário: {pdf_file_path}", size=12))
-        row.controls[0] = lista
-        pagina.add(row)
-        pdf_file_path = verificar_caminho_plataforma(pdf_file_path)
-        reader = PdfReader(pdf_file_path)
+    for page_num, page in enumerate(reader.pages):
+        texto = ocr_file(page_num, pdf_file_path)
+        lei_dec_ocorrencias = list(BUSCA_PADRAO.finditer(texto))
 
-        for page_num, page in enumerate(reader.pages):
-            texto = ocr_file(page_num, pdf_file_path)
-            lei_dec_ocorrencias = list(busca_padrao.finditer(texto))
+        for i, match in enumerate(lei_dec_ocorrencias):
+            writer = PdfWriter()
+            writer.add_page(reader.pages[page_num])
 
-            for i, match in enumerate(lei_dec_ocorrencias):
-                writer = PdfWriter()
-                writer.add_page(reader.pages[page_num])
+            if not FINAL_PADRAO.search(texto):
+                proxima_pagina = page_num + 1
 
-                if not final_busca.search(texto):
-                    proxima_pagina = page_num + 1
+                while proxima_pagina < len(reader.pages):
+                    proxima_pagina_texto = ocr_file(proxima_pagina, pdf_file_path)
+                    writer.add_page(reader.pages[proxima_pagina])
+                    proxima_pagina += 1
 
-                    while proxima_pagina < len(reader.pages):
-                        proxima_pagina_texto = ocr_file(proxima_pagina, pdf_file_path)
-                        writer.add_page(reader.pages[proxima_pagina])
-                        proxima_pagina += 1
+                    ocorrencias_com_anexos = []
 
-                        ocorrencias_com_anexos = []
+                    if ANEXO_PADRAO.search(texto):
+                        ocorrencias_com_anexos.append(
+                            f"Necessário revisão no arquivo: {match.group()} possui anexo.")
 
-                        if anexo_pattern.search(texto):
-                            ocorrencias_com_anexos.append(
-                                f"Necessário revisão no arquivo: {match.group()} possui anexo.")
+                        pagina.remove(row)
+                        lista_com_anexos.controls.append(
+                            ft.Text(f"Necessário revisão no arquivo: {match.group()} possui anexo.", color="green",
+                                    size=10)
+                        )
+                        row.controls[1] = lista_com_anexos
 
-                            pagina.remove(row)
-                            lista_com_anexos.controls.append(
-                                ft.Text(f"Necessário revisão no arquivo: {match.group()} possui anexo.", color="green",
-                                        size=10)
-                            )
-                            row.controls[1] = lista_com_anexos
+                        pagina.add(row)
 
-                            pagina.add(row)
-
-                        if final_busca.search(proxima_pagina_texto):
-                            break
+                    if FINAL_PADRAO.search(proxima_pagina_texto):
+                        break
 
                 output_folder = ""
                 if sys.platform.startswith('linux'):
@@ -92,6 +79,31 @@ def gerar_arquivos_de_leis_e_decretos(pagina: ft.Page, diario_data: str):
                 lista.controls.append(ft.Text(f"{match.group()} encontrado!", color="green", size=10))
                 row.controls[0] = lista
                 pagina.add(row)
+                
+def gerar_arquivos_de_leis_e_decretos(pagina: ft.Page, diario_data: str):
+    load_dotenv()
+    
+    separar_arquivos_merge("encontrados", diario_data)
+    diarios = pegar_arquivos_pasta("diarios", diario_data)
+    
+    row = ft.Row()
+    lista = ft.ListView(expand=1, spacing=10, padding=20, auto_scroll=True, height=100)
+    lista_com_anexos = ft.ListView(expand=1, spacing=10, padding=20, auto_scroll=True, height=100)
+    row.controls.append(lista)
+    row.controls.append(lista_com_anexos)
+    pagina.add(row)
+    pr = ft.ProgressBar()
+    pagina.add(pr)
+    num_processos = cpu_count() / 3
+    counter = 0
+    max_value = len(diarios)
+    #with Pool(num_processos) as p:
+    #    for result in p.imap_unordered(buscar_diarios,[i for i in range(diario_inicio.days, diario_final.days + 1)]):
+    #        counter += 1
+    #        pr.value = int((counter / max_value) * 100) * 0.01
+    #        pr.update()
+    for pdf_file_path in diarios:
+      read_transform_file(pdf_file_path, pagina, row, lista, lista_com_anexos)
     pagina.remove(row)
 
 
@@ -109,6 +121,8 @@ def main(page: ft.Page):
             return
 
         page.add(ft.Text(f"Buscando diários oficiais do ano {ano} e mês {mes}..."))
+        limpar_pasta(["encontrados", "diarios", "image_output", "resultado"])
+        criar_pasta_se_nao_existe(["encontrados", "diarios", "image_output", "resultado"])
         baixar_arquivos(ano, mes)
         gerar_arquivos_de_leis_e_decretos(page, f"{ano}-{mes:02d}")
         page.add(ft.Text("Pesquisa concluída com sucesso!"))
@@ -135,4 +149,5 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
+    freeze_support()
     ft.app(target=main)
