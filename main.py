@@ -1,5 +1,5 @@
 import os
-from multiprocessing import Pool, freeze_support, cpu_count
+from multiprocessing import freeze_support
 import sys
 import flet as ft
 from PyPDF2 import PdfReader, PdfWriter
@@ -19,8 +19,7 @@ def read_transform_file(pdf_file_path: str, pagina, row, lista, lista_com_anexos
 
     for page_num, page in enumerate(reader.pages):
         texto = ocr_file(page_num, pdf_file_path)
-        lei_dec_ocorrencias = list(BUSCA_PADRAO.finditer(texto))
-
+        lei_dec_ocorrencias = list(BUSCA_PADRAO.finditer(texto))   
         for i, match in enumerate(lei_dec_ocorrencias):
             writer = PdfWriter()
             writer.add_page(reader.pages[page_num])
@@ -40,10 +39,12 @@ def read_transform_file(pdf_file_path: str, pagina, row, lista, lista_com_anexos
                             f"Necessário revisão no arquivo: {match.group()} possui anexo.")
 
                         pagina.remove(row)
-                        lista_com_anexos.controls.append(
-                            ft.Text(f"Necessário revisão no arquivo: {match.group()} possui anexo.", color="green",
-                                    size=10)
-                        )
+                        aviso = f"Necessário revisão no arquivo: {match.group()} possui anexo."
+                        
+                        # Verifica se o aviso já existe
+                        if not any(control.value == aviso for control in lista_com_anexos.controls):
+                            lista_com_anexos.controls.append(ft.Text(aviso, color="green", size=10))
+
                         row.controls[1] = lista_com_anexos
 
                         pagina.add(row)
@@ -51,34 +52,33 @@ def read_transform_file(pdf_file_path: str, pagina, row, lista, lista_com_anexos
                     if FINAL_PADRAO.search(proxima_pagina_texto):
                         break
 
-                output_folder = ""
-                if sys.platform.startswith('linux'):
-                    output_folder = gerar_pdf_nome(match.group(), pdf_file_path.split("/")[1].split(".")[0])
-                else:
-                    output_folder = gerar_pdf_nome(match.group(), pdf_file_path.split("\\")[1].split(".")[0])
+            output_folder = ""
+            if sys.platform.startswith('linux'):
+                output_folder = gerar_pdf_nome(match.group(), pdf_file_path.split("/")[1].split(".")[0])
+            else:
+                output_folder = gerar_pdf_nome(match.group(), pdf_file_path.split("\\")[1].split(".")[0])
 
-                output_folder = verificar_caminho_plataforma(output_folder)
-                if not os.path.exists(output_folder):
-                    with open(output_folder, 'wb') as output_pdf:
-                        writer.write(output_pdf)
-                        writer.close()
-                else:
-                    existing_pdf = PdfReader(open(output_folder, 'rb'))
-                    writer2 = PdfWriter()
-                    for page in existing_pdf.pages:
-                        writer2.add_page(page)
-                    for page in writer.pages:
-                        writer2.add_page(page)
-                    os.remove(output_folder)
-                    with open(output_folder, 'wb') as output_pdf:
-                        writer2.write(output_pdf)
-                        writer2.close()
+            output_folder = verificar_caminho_plataforma(output_folder)
+            if not os.path.exists(output_folder):
+                with open(output_folder, 'wb') as output_pdf:
+                    writer.write(output_pdf)
                     writer.close()
+            else:
+                existing_pdf = PdfReader(open(output_folder, 'rb'))
+                writer2 = PdfWriter()
+                for page in existing_pdf.pages:
+                    writer2.add_page(page)
+                for page in writer.pages:
+                    writer2.add_page(page)
+                with open(output_folder, 'wb') as output_pdf:
+                    writer2.write(output_pdf)
+                    writer2.close()
+                writer.close()
 
-                pagina.remove(row)
-                lista.controls.append(ft.Text(f"{match.group()} encontrado!", color="green", size=10))
-                row.controls[0] = lista
-                pagina.add(row)
+            pagina.remove(row)
+            lista.controls.append(ft.Text(f"{match.group()} encontrado!", color="green", size=10))
+            row.controls[0] = lista
+            pagina.add(row)
                 
 def gerar_arquivos_de_leis_e_decretos(pagina: ft.Page, diario_data: str):
     load_dotenv()
@@ -88,20 +88,12 @@ def gerar_arquivos_de_leis_e_decretos(pagina: ft.Page, diario_data: str):
     
     row = ft.Row()
     lista = ft.ListView(expand=1, spacing=10, padding=20, auto_scroll=True, height=100)
-    lista_com_anexos = ft.ListView(expand=1, spacing=10, padding=20, auto_scroll=True, height=100)
+    lista_com_anexos: ft.ListView = ft.ListView(expand=1, spacing=10, padding=20, auto_scroll=True, height=100)
     row.controls.append(lista)
     row.controls.append(lista_com_anexos)
     pagina.add(row)
     pr = ft.ProgressBar()
     pagina.add(pr)
-    num_processos = cpu_count() / 3
-    counter = 0
-    max_value = len(diarios)
-    #with Pool(num_processos) as p:
-    #    for result in p.imap_unordered(buscar_diarios,[i for i in range(diario_inicio.days, diario_final.days + 1)]):
-    #        counter += 1
-    #        pr.value = int((counter / max_value) * 100) * 0.01
-    #        pr.update()
     for pdf_file_path in diarios:
       read_transform_file(pdf_file_path, pagina, row, lista, lista_com_anexos)
     pagina.remove(row)

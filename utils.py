@@ -1,10 +1,11 @@
 import sys
 from typing import List
 import os
+import shutil
 
 # Função que retorna o mês por extenso a partir do número do mês.
 
-def mes_extenso_por_numero(mes: str):
+def mes_extenso_por_numero(mes: str) -> str:
     if mes == "01":
         return "Janeiro"
     elif mes == "02":
@@ -31,7 +32,7 @@ def mes_extenso_por_numero(mes: str):
         return "Dezembro"
 
 # Função que verifica o caminho da plataforma para substituir as barras.
-def verificar_caminho_plataforma(caminho):
+def verificar_caminho_plataforma(caminho: str) -> str:
     if sys.platform.startswith('linux'):
         return caminho.replace("\\", "/")
     return caminho
@@ -53,10 +54,7 @@ def criar_pasta_se_nao_existe(pastas: List[str]):
 def limpar_pasta(pastas: List[str]):
     for pasta in pastas:
         if os.path.isdir(pasta):
-            for root, dirs, files in os.walk(pasta):
-                for file in files:
-                    os.remove(os.path.join(root, file))
-                for dir in dirs:
-                    os.rmdir(os.path.join(root, dir))
-            os.rmdir(pasta)
-    
+            # Remove todos os arquivos e subdiretórios
+            shutil.rmtree(pasta)
+            # Recria a pasta vazia
+            os.makedirs(pasta)
